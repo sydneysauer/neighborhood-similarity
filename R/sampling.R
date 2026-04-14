@@ -1,3 +1,26 @@
+#' Download and prepare NYC Census tract boundaries
+#'
+#' Downloads tract shapefiles from the US Census Bureau via the tigris
+#' package and standardizes column names. NYC spans five counties
+#' (Manhattan=061, Brooklyn=047, Queens=081, Bronx=005, Staten Island=085).
+#'
+#' @param year Integer, Census year for tract boundaries (default: 2010)
+#' @param crs Integer, EPSG code for coordinate reference system (default: 2263)
+#' @return sf object with columns: ct_code, area_land, area_water, geometry
+#'
+#' @examples
+#' tracts <- get_nyc_tracts()
+#' plot(st_geometry(tracts))
+get_nyc_tracts <- function(year = 2010, crs = 2263) {
+  codes <- c("061", "047", "081", "005", "085")
+  tracts_list <- lapply(codes, function(code) {
+    tigris::tracts(state = "NY", county = code, year = year, class = "sf") %>%
+      select(ct_code = GEOID10, area_land = ALAND10, area_water = AWATER10) %>%
+      st_transform(crs)
+  })
+  do.call(rbind, tracts_list)
+}
+
 #' Sample random points within Census tract polygons
 #'
 #' Generates random geographic coordinates within each Census tract.
@@ -31,7 +54,7 @@ sample_tract_points <- function(tracts, max_per_tract = 5, seed = 123) {
     )
   })
   # Convert rows (currently one row per tract, with a list of points) into one row per point with tract and point IDs
-  points_df <- map2_dfr(points, tracts$ct_code, ~ {
+  points_sf <- map2_dfr(points, tracts$ct_code, ~ {
     if (is.null(.x)) return(NULL) # Skip if sampling failed
     tibble(
       tract_id = .y,
@@ -39,7 +62,27 @@ sample_tract_points <- function(tracts, max_per_tract = 5, seed = 123) {
       geometry = .x
     )
   }) %>%
-    st_as_sf()
+    st_as_sf() 
+  # %>% st_set_crs(st_crs(tracts))
 
+  st_crs(points_sf) <- st_crs(tracts)
   return(points_sf)
+}
+
+#' Prepare sample points for Street View API
+#'
+#' Transforms spatial points to WGS84 and extracts lat/lon as a tibble.
+#'
+#' @param points sf object with POINT geometry
+#' @return Tibble with columns: tract_id, point_id, lat, lon
+prepare_api_coords <- function(points) {
+  # Get the coordinates
+  points <- st_transform(points, 4326) # Convert to WGS84
+  coords <- st_coordinates(points) 
+  # Bind columns back to the tract/point IDs
+  api_coords <- points %>%
+    st_drop_geometry() %>%
+    bind_cols(as_tibble(coords)) %>%
+    rename(lon = X, lat = Y)
+  return(api_coords)
 }
