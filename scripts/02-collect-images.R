@@ -11,7 +11,7 @@ API_KEY <- Sys.getenv("GOOGLE_STREETVIEW_KEY")
 OUTPUT_DIR <- here("data/images")
 
 # Retrieve street view images for all coordinates
-# First, test with one coordinate.
+# First, test with one coordinate
 test_coord <- coords %>% slice(1)
 test <- download_streetview(
   lat = test_coord$lat,
@@ -27,15 +27,20 @@ if (test) {
   stop("Failed to download test image. Check API key and parameters.")
 }
 
-# Test on one of the missing images to debug
-test_missing <- coords %>% filter(tract_id =="36005011000" & point_id == "1")
-missing <- download_streetview(
-  lat = test_missing$lat,
-  lon = test_missing$lon,
-  api_key = API_KEY,
-  output_path = file.path(OUTPUT_DIR, "test_missing.jpg")
-)
-
 # Download all images
 download_status <- download_streetview_batch(coords, API_KEY, OUTPUT_DIR)
 
+# Save a manifest mapping each image file to its tract and coordinates
+manifest <- coords %>%
+  mutate(
+    file_name = sprintf("%s_%s.jpg", tract_id, point_id),
+    success = download_status$success
+  ) %>%
+  filter(success) %>% # only keep successful downloads in manifest
+  select(tract_id, point_id, lat, lon, file_name)
+saveRDS(manifest, here("data/processed/image_manifest.rds"))
+
+# Print status report
+success_rate <- mean(download_status$success) * 100
+cat(sprintf("Downloaded %d out of %d images successfully (%.1f%% success rate).", 
+            sum(download_status$success), nrow(coords), success_rate))

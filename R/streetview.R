@@ -33,6 +33,12 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
     stop("Field of view (fov) must be a numeric value between 0 and 120.")
   }
   
+  # Break if the file already exists to avoid unnecessary API calls (for resumability)
+  # TODO: Issue here is that 404s do not get saved, so it will try again for those.
+  if (file.exists(output_path)) {
+    return(TRUE)
+  }
+
   BASE_URL <- "https://maps.googleapis.com/maps/api/streetview"
   # Make the request to the Street View API
   # Sample query from API documentation: 
@@ -53,7 +59,6 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
   
   # Check the response status
   if (resp_status(resp) == 200) {
-    # Save the image to output_path
     writeBin(resp_body_raw(resp), output_path)
     return(TRUE)
   } else {
@@ -76,9 +81,21 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
 download_streetview_batch <- function(coords, api_key, output_dir,
                                       delay = 0.1) {
   # Validate inputs
-  # TODO fill in
+  required_cols <- c("tract_id", "point_id", "lat", "lon")
+  if (!all(required_cols %in% colnames(coords))) {
+    stop(sprintf("Coords tibble must contain columns: %s", paste(required_cols, collapse = ", ")))
+  }
+  if (!(is.character(api_key) && nchar(api_key) > 0)) {
+    stop("API key must be a non-empty string.")
+  }
+  if (!(is.character(output_dir) && nchar(output_dir) > 0)) {
+    stop("Output directory must be a non-empty string.")
+  }
+  if (!is.numeric(delay) || delay < 0) {
+    stop("Delay must be a non-negative numeric value.")
+  }
+
   # Create output directory if it doesn't exist
-  print(output_dir)
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   if(!dir.exists(output_dir)) {
     stop("Output directory does not exist and could not be created.")
@@ -89,6 +106,7 @@ download_streetview_batch <- function(coords, api_key, output_dir,
     point_id = coords$point_id,
     success = rep(FALSE, nrow(coords)) # set all false to begin, then change to true as images downloaded
   )
+
   # Download images
   for (i in 1:nrow(coords)) {
     coord <- coords[i, ]
@@ -105,10 +123,9 @@ download_streetview_batch <- function(coords, api_key, output_dir,
     # An extremely conservative approach given the 30,000 queries/min rate limit, but allows me to monitor progress.
     if (i %% 10 == 0) {
       Sys.sleep(delay)
-      print(sprintf("Downloaded %d images so far; success rate: %.1f%%", i, mean(results$success[1:i]) * 100))
+      print(sprintf("Processed %d coordinates so far; image download success rate: %.1f%%", 
+            i, mean(results$success[1:i]) * 100))
     }
   }  
-  
   return(results)
-  # - Consider: what if the script crashes halfway? How do you resume?
 }
