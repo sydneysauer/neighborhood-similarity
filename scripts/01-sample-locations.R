@@ -1,6 +1,7 @@
 library(tidyverse)
 library(sf)
-source("R/sampling.R")
+library(here)
+source(here("R/sampling.R"))
 
 # Set seed for uniformity 
 SEED <- 317
@@ -21,4 +22,7 @@ points <- sample_tract_points(tracts, 5, SEED)
 
 # Convert points to WGS84 and extract lat/lon for API
 coords <- prepare_api_coords(points)
+
+# Save coords for next pipeline step
+saveRDS(coords, here("data/processed/coordinates.rds"))
 
