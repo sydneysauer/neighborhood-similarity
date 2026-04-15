@@ -44,18 +44,21 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
       fov = fov,
       heading = heading,
       key = api_key,
-      return_error_codes = TRUE # Returns 404 rather than placeholder image.
-    ) |>
-   req_perform()
+      return_error_code = "true" # Returns 404 rather than placeholder image.
+    )
+  resp <- req |>
+    req_error(is_error = \(resp) FALSE) |> # Suppress error so we can handle it manually below
+    req_perform()
+  print(resp_status(resp))
   
   # Check the response status
-  if (resp_status(req) == 200) {
+  if (resp_status(resp) == 200) {
     # Save the image to output_path
-    writeBin(resp_body_raw(req), output_path)
+    writeBin(resp_body_raw(resp), output_path)
     return(TRUE)
   } else {
     # Print error message for debugging
-    print(sprintf("Error: %s", resp_status_desc(req)))
+    print(sprintf("Error: %s", resp_status_desc(resp)))
     return(FALSE)
   }
 }
@@ -72,12 +75,40 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
 #' @return Tibble with download status for each location
 download_streetview_batch <- function(coords, api_key, output_dir,
                                       delay = 0.1) {
-  # Your code here
-  # Hints:
-  # - Create output_dir if it doesn't exist
-  # - Name files systematically: "{tract_id}_{point_id}.jpg"
-  # - Use Sys.sleep(delay) between requests for rate limiting
-  # - Track success/failure in a results tibble
-  # - Print progress messages (every 100 images or so)
+  # Validate inputs
+  # TODO fill in
+  # Create output directory if it doesn't exist
+  print(output_dir)
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  if(!dir.exists(output_dir)) {
+    stop("Output directory does not exist and could not be created.")
+  } 
+  # Create a results tibble to track success/failure
+  results <- tibble(
+    tract_id = coords$tract_id,
+    point_id = coords$point_id,
+    success = rep(FALSE, nrow(coords)) # set all false to begin, then change to true as images downloaded
+  )
+  # Download images
+  for (i in 1:nrow(coords)) {
+    coord <- coords[i, ]
+    # Construct output path
+    output_path <- file.path(output_dir, sprintf("%s_%s.jpg", coord$tract_id, coord$point_id))
+    # Download image
+    results$success[i] <- download_streetview(
+      lat = coord$lat,
+      lon = coord$lon,
+      api_key = api_key,
+      output_path = output_path
+    )
+    # Sleep and provide status update every 10 images [TODO: INCREASE tO 100(?) FOR PRODUCTION] 
+    # An extremely conservative approach given the 30,000 queries/min rate limit, but allows me to monitor progress.
+    if (i %% 10 == 0) {
+      Sys.sleep(delay)
+      print(sprintf("Downloaded %d images so far; success rate: %.1f%%", i, mean(results$success[1:i]) * 100))
+    }
+  }  
+  
+  return(results)
   # - Consider: what if the script crashes halfway? How do you resume?
 }
