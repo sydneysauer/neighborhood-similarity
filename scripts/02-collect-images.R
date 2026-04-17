@@ -11,7 +11,7 @@ API_KEY <- Sys.getenv("GOOGLE_STREETVIEW_KEY")
 OUTPUT_DIR <- here("data/images")
 
 # Retrieve street view images for all coordinates
-# First, test with one coordinate
+# First, test API connection with one coordinate
 test_coord <- coords %>% slice(1)
 test <- download_streetview(
   lat = test_coord$lat,
@@ -65,3 +65,8 @@ ggplot(success_by_tract, aes(x = success_rate)) +
        y = "Number of Tracts") +
   theme_minimal()
 ggsave(here("output/figures/success_rate_histogram.png"), width = 6, height = 4)
+
+# 8,440 images (an 87.2% success rate) and 2 out of 627 tracts without any successful downloads
+# is not perfect, but I am really happy with this for the sake of my project! The histogram also 
+# shows that the vast majority of tracts had close to 100% success, which makes me feel good about
+# the quality/representativeness of the images I have to work with for the next steps of my project.

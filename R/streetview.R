@@ -55,7 +55,6 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
   resp <- req |>
     req_error(is_error = \(resp) FALSE) |> # Suppress error so we can handle it manually below
     req_perform()
-  print(resp_status(resp))
   
   # Check the response status
   if (resp_status(resp) == 200) {
@@ -63,12 +62,15 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
     return(TRUE)
   } else if (resp_status(resp) == 404) {
     # Image not found for this location, log and return FALSE
-    print("No Street View image found.")
+    # print("No Street View image found.")
+    # Note: This message cluttered the output, so I have removed it for future runs.
     return(FALSE)
   } else if (resp_status(resp) == 429) {
     print("Rate limit hit. Waiting one minute before making more requests.")
     Sys.sleep(60)
     # Note: This is not the ideal fix, as it will not download the image that triggered the rate limit.
+    # If I had more time, I would like to implement a more robust solution, but I've tried to design my 
+    # request frequency to circumvent rate limit issues altogether. 
     return(FALSE)
   } else {
     # Print error message for debugging
@@ -88,7 +90,7 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
 #' @param delay Numeric, seconds to wait between requests (default: 0.1)
 #' @return Tibble with download status for each location
 download_streetview_batch <- function(coords, api_key, output_dir,
-                                      delay = 0.1) {
+                                      delay = 0.5) {
   # Validate inputs
   required_cols <- c("tract_id", "point_id", "lat", "lon")
   if (!all(required_cols %in% colnames(coords))) {
@@ -128,9 +130,9 @@ download_streetview_batch <- function(coords, api_key, output_dir,
       api_key = api_key,
       output_path = output_path
     )
-    # Sleep and provide status update every 10 images [TODO: INCREASE tO 100(?) FOR PRODUCTION] 
-    # An extremely conservative approach given the 30,000 queries/min rate limit, but allows me to monitor progress.
-    if (i %% 10 == 0) {
+    # Sleep and provide status update every 100 images
+    # A conservative approach given the 30,000 queries/min rate limit, but allows me to monitor progress.
+    if (i %% 100 == 0) {
       Sys.sleep(delay)
       print(sprintf("Processed %d coordinates so far; image download success rate: %.1f%%", 
             i, mean(results$success[1:i]) * 100))

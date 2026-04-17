@@ -12,7 +12,8 @@
 #' tracts <- get_nyc_tracts()
 #' plot(st_geometry(tracts))
 get_nyc_tracts <- function(year = 2010, crs = 2263) {
-  codes <- c("061", "047", "081", "005", "085")
+  # Note: Limiting to just New York and the Bronx so I can get a denser sample for this project. 
+  codes <- c("061", "005") # All counties: c("061", "047", "081", "005", "085")
   tracts_list <- lapply(codes, function(code) {
     tigris::tracts(state = "NY", county = code, year = year, class = "sf") %>%
       select(ct_code = GEOID10, area_land = ALAND10, area_water = AWATER10) %>%
