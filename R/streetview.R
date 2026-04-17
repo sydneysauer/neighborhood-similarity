@@ -61,6 +61,15 @@ download_streetview <- function(lat, lon, api_key, size = "640x640",
   if (resp_status(resp) == 200) {
     writeBin(resp_body_raw(resp), output_path)
     return(TRUE)
+  } else if (resp_status(resp) == 404) {
+    # Image not found for this location, log and return FALSE
+    print("No Street View image found.")
+    return(FALSE)
+  } else if (resp_status(resp) == 429) {
+    print("Rate limit hit. Waiting one minute before making more requests.")
+    Sys.sleep(60)
+    # Note: This is not the ideal fix, as it will not download the image that triggered the rate limit.
+    return(FALSE)
   } else {
     # Print error message for debugging
     print(sprintf("Error: %s", resp_status_desc(resp)))
