@@ -114,7 +114,7 @@ download_streetview_batch <- function(coords, api_key, output_dir,
   # Create a results tibble to track success/failure
   results <- tibble(
     tract_id = coords$tract_id,
-    point_id = coords$point_id,
+    point_id = coords$point_id, # Note: I now realize this skips ids that weren't downloaded, too late to change now.
     success = rep(FALSE, nrow(coords)) # set all false to begin, then change to true as images downloaded
   )
 
