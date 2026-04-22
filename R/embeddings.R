@@ -57,8 +57,15 @@ embed_image <- function(image_path, api_key, model = "voyage-multimodal-3.5") {
     resp_content <- resp_body_json(resp)
     embedding <- resp_content$data[[1]]$embedding
     return(embedding)
+  } else if (resp_status(resp) == 404) {
+    print(paste("Image not found:", image_path))
+    return(NULL)
+  } else if (resp_status(resp) == 429) {
+    print(resp_body_string(resp)) # Print the error message from the API
+    stop("Rate limit exceeded: Consider adding a delay between requests.")
+    return(NULL)
   } else {
-    warning(paste("API call failed for image:", image_path, "- Status code:", resp_status(resp)))
+    stop(paste("API call failed for image:", image_path, "- Status code:", resp_status(resp)))
     return(NULL)
   }
 }
@@ -75,12 +82,122 @@ embed_image <- function(image_path, api_key, model = "voyage-multimodal-3.5") {
 #' @return List with: embeddings (matrix), manifest (tibble mapping rows to files)
 embed_images_batch <- function(image_paths, api_key, batch_size = 1,
                                 delay = 0.5) {
-  # Your code here
-  # Hints:
-  # - Process images one at a time (or in small batches if the API supports it)
-  # - Store results in a list, then rbind into a matrix at the end
-  # - Track which images succeeded/failed
-  # - Save intermediate results periodically (every 100 images)
-  #   so you don't lose everything on a crash
-  # - Print progress
+  results <- list()
+  # Process images in batches
+  for (i in seq(1, length(image_paths), by = batch_size)) {
+    batch_paths <- image_paths[i:min(i + batch_size - 1, length(image_paths))]
+    print(paste("Processing batch:", i, "to", min(i + batch_size - 1, length(image_paths))))
+    batch_embeddings <- lapply(batch_paths, embed_image, api_key = api_key)
+    
+    # Store results
+    for (j in seq_along(batch_paths)) {
+      results[[batch_paths[j]]] <- batch_embeddings[[j]]
+    }
+    write_rds(results, here("data/embeddings/embeddings.rds")) # Save intermediate results
+    
+    # Print progress
+    cat(sprintf("Processed %d/%d images\n", min(i + batch_size - 1, length(image_paths)), length(image_paths)))
+    
+    # Delay to respect rate limits
+    Sys.sleep(delay)
+  }
+  # Create a manifest tibble mapping file paths to embeddings
+  manifest <- tibble(
+    file_path = names(results),
+    embedding = results
+  )
+
+  return(list(results, manifest)) # this is redundant -- whoops!!!
 }
+
+#' Aggregate image embeddings to Census tract level
+#'
+#' Computes a tract-level embedding by averaging the image-level
+#' embeddings for all images within each tract.
+#'
+#' @param embeddings Matrix, one row per image (from embed_images_batch)
+#' @param manifest Tibble with tract_id for each row of embeddings
+#' @param min_images Integer, minimum number of images required to compute a tract embedding (default: 5)
+#' @return List with: tract_embeddings (matrix), tract_ids (character vector)
+aggregate_tract_embeddings <- function(embeddings, manifest, min_images = 5) {
+  # Validation
+  if (!is.matrix(embeddings) || !is.numeric(embeddings)) {
+    stop("`embeddings` must be a numeric matrix.")
+  }
+  if (nrow(embeddings) != nrow(manifest)) {
+    stop("Number of rows in `embeddings` must match number of rows in `manifest`.")
+  }
+  if (!"tract_id" %in% names(manifest)) {
+    stop("`manifest` must contain a `tract_id` column.")
+  }
+  # Match up embeddings with tract_ids
+  idx_by_tract <- split(seq_len(nrow(manifest)), manifest$tract_id)
+  idx_by_tract <- idx_by_tract[lengths(idx_by_tract) >= 5]
+
+  # NOTE:
+  # I realize now that I made a mistake early in data collection that I cannot fix due to 
+  # resource constraints. By setting the number of images per tract based on the ntile, some tracts
+  # have very few images, which is not ideal for averaging across! This means dropping rows with less 
+  # than 5 images filters out the smallest tracts (by land area). This has taught me in the future to 
+  # really understand all steps of the analysis process when making big design decisions--especially 
+  # when I have a limited number of API credits to go back and fix mistakes down the line.
+  # In the end, this only dropped 89 of the 625 tracts, but again, this introduces a systematic bias
+  # against small land area tracts (which might have great population density).
+
+  tract_embeddings <- do.call(
+    rbind,
+    lapply(
+      idx_by_tract,
+      \(idx) colMeans(embeddings[idx, , drop = FALSE], na.rm = TRUE)
+    )
+  )
+  tract_ids <- names(idx_by_tract)
+
+  # L2 normalize the tract embeddings to facilitate cosine similarity comparisons later on
+  tract_embeddings <- tract_embeddings / sqrt(rowSums(tract_embeddings^2))
+
+  list(
+    tract_embeddings = tract_embeddings,
+    tract_ids = tract_ids
+  )
+}
+
+#' Compute cosine similarity matrix between tract embeddings
+#'
+#' @param embeddings Matrix, one row per tract (L2-normalized)
+#' @return Matrix of pairwise cosine similarities
+tract_similarity <- function(embeddings) {
+  # Cosine similarity between L2-normalized vectors is just the dot product
+  similarity_matrix <- embeddings %*% t(embeddings) # Compare each tract embedding to every other tract embedding
+  return(similarity_matrix)
+}
+
+# Deprecated version of aggregate_tract_embeddings that did not work. Keeping in case I can fix this approach.
+# DEP_aggregate_tract_embeddings <- function(embeddings, manifest) {
+#   # Validation 
+#   if (nrow(embeddings) != nrow(manifest)) {
+#     stop("Number of rows in embeddings must match number of rows in manifest.")
+#   }
+#   if (!is.matrix(embeddings)) {
+#     stop("Embeddings must be a matrix.")
+#   }
+
+#   # Group rows in embedding using tract_id from manifest, then compute column-wise mean for each group
+#   tract_embeddings <- manifest %>%
+#     bind_cols(tibble(embedding = list(embeddings))) %>%
+#     group_by(tract_id) %>%
+#     # Filter out tracts with less than 5 images (SEE NOTE AT END OF FUNCTION)
+#     filter(n() >= 5) %>%
+#     # Compute column-wise mean of the embedding vectors for each tract
+#     summarise(embedding = list(colMeans(do.call(rbind, embedding))), .groups = "drop")
+
+#   #   # Unnest list column embedding into columns named embedding_1, embedding_2, ..., embedding_1024
+#   #   unnest_wider(embedding, names_sep = "_")
+#   # # %>%
+#   # #   summarise(across(starts_with("embedding_"), mean, na.rm = TRUE), .groups = "drop")
+
+#   # for debugging: print the head
+#   print(head(tract_embeddings))
+
+#   #return(list(as.matrix(tract_embeddings %>% select(-tract_id)), tract_embeddings$tract_id))
+# }
