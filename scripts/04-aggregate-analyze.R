@@ -80,5 +80,17 @@ ggplot(umap_graph, aes(x = V1, y = V2)) +
   theme_minimal()
 ggsave(here("output/figures/umap_projection.png"), width = 8, height = 6) # Shows some clusters!
 
-# The UMAP projection shows more distinct clusers, so let's dig in here.
-
+# Let's merge with Census tract-level data to see if we can identify any patterns in the PCA clusters.
+census_data <- read.csv(here("data/census/nyc_tract_data.csv")) %>%
+  mutate(tract_id = as.character(GeoID))
+# Merge with PCA graph data to color points by borough
+pca_graph <- pca_graph %>%
+  left_join(census_data, by = "tract_id")
+pca_graph$Borough[is.na(pca_graph$Borough)] <- "Other" # Handle any missing boroughs
+ggplot(pca_graph, aes(x = PC1, y = PC2, color = Borough)) +
+  geom_point() +
+  labs(title = "PCA Projection of Tract Embeddings Colored by Borough", 
+        x = "Principal Component 1", y = "Principal Component 2") +
+  theme_minimal()
+ggsave(here("output/figures/pca_projection_borough.png"), width = 8, height = 6)
+# Shows some clear clustering by borough!
