@@ -35,8 +35,10 @@ print(paste("Number of tracts:", nrow(tract_embeddings)))
 # Compute cosine similarity matrix between tract embeddings
 similarity_matrix <- tract_similarity(tract_embeddings)
 
+# ------------------------------------------------------------------------------------#
 # 3.1 Dimensionality reduction 
 # Reduce the 1024-dimensional tract embeddings to 2-3 dimensions for visualization
+# ------------------------------------------------------------------------------------#
 
 # Linear approach: PCA
 pca_result <- prcomp(tract_embeddings, center = TRUE, scale. = TRUE)
@@ -94,3 +96,81 @@ ggplot(pca_graph, aes(x = PC1, y = PC2, color = Borough)) +
   theme_minimal()
 ggsave(here("output/figures/pca_projection_borough.png"), width = 8, height = 6)
 # Shows some clear clustering by borough!
+
+# ------------------------------------------------------------------------------------#
+# 3.2 Clustering
+# Group tracts by visual similarity (k-means clustering on the tract embeddings)
+# ------------------------------------------------------------------------------------#
+
+# Try a few k-values
+set.seed(317) # Set seed for reproducibility
+km <- kmeans(tract_embeddings, centers = 6)
+table(km$cluster) # Relatively unbalanced across clusters
+# Try another k value
+km <- kmeans(tract_embeddings, centers = 4)
+table(km$cluster) # This puts over 200 tracts in group 2, so maybe I want a larger k
+km <- kmeans(tract_embeddings, centers = 8)
+table(km$cluster) # This is more balanced, so I'll go with this!
+
+# I made a graph of this mapped to the PCA chart, but a lot was going on with k=8.
+# So I decided to overwrite this and simplify down to k=4.
+km <- kmeans(tract_embeddings, centers = 4)
+table(km$cluster) # This is more balanced, so I'll go with this!
+pca_graph <- pca_graph %>%
+  mutate(cluster = factor(km$cluster))
+ggplot(pca_graph, aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point() +
+  labs(title = "PCA Projection of Tract Embeddings Colored by Cluster", 
+        x = "Principal Component 1", y = "Principal Component 2") +
+  theme_minimal()
+ggsave(here("output/figures/pca_projection_cluster.png"), width = 8, height = 6)
+# This is MUCH clearer to me and matches what I would have noticed visually.
+
+# Now I want to compare the built environment in each cluster. 
+# First, clean Census data into a smaller dataset
+housing_comp <- census_data %>%
+  # Total housing units, vacant units, owner-occupied units, renter-occupied units
+  select(tract_id, HUnits, VacHUs, OOcHU_1, ROcHU_1) %>%
+  mutate(
+    HUnits = as.numeric(HUnits),
+    VacHUs = as.numeric(VacHUs),
+    OOcHU_1 = as.numeric(OOcHU_1),
+    ROcHU_1 = as.numeric(ROcHU_1)
+  )
+# See how many missing after NA coercion (wow, a lot!)
+colSums(is.na(housing_comp))
+# A lot missing. Will carry on to see how this pans out once we average across tracts in the cluster.
+housing_comp <- housing_comp %>%
+  mutate(
+    vacancy_rate = VacHUs / HUnits,
+    own_rate = OOcHU_1 / HUnits,
+    rent_rate = ROcHU_1 / HUnits
+  ) %>%
+  select(tract_id, vacancy_rate, own_rate, rent_rate)
+head(housing_comp)
+# Link to tracts and summarize
+cluster_means <- pca_graph %>%
+  left_join(housing_comp, by = "tract_id") %>%
+  group_by(cluster) %>%
+  summarize(
+    mean_vacancy_rate = mean(vacancy_rate, na.rm = TRUE),
+    mean_own_rate = mean(own_rate, na.rm = TRUE),
+    mean_rent_rate = mean(rent_rate, na.rm = TRUE)
+  )
+# Visualize: Stacked bar chart of mean rates by cluster
+cluster_means_long <- cluster_means %>%
+  pivot_longer(cols = starts_with("mean_"), names_to = "rate_type", values_to = "mean_rate") %>%
+  mutate(rate_type = recode(rate_type,
+                            "mean_vacancy_rate" = "Vacancy Rate",
+                            "mean_own_rate" = "Ownership Rate",
+                            "mean_rent_rate" = "Rentership Rate"))
+ggplot(cluster_means_long, aes(x = cluster, y = mean_rate, fill = rate_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Housing Unit Status by Cluster", x = "Cluster", y = "Mean Rate", fill="Housing Unit Status") +
+  theme_minimal() +
+  scale_fill_manual(values = c("steelblue", "salmon", "lightgreen"))
+ggsave(here("output/figures/cluster_housing_rates.png"), width = 8, height = 6)
+# This visualization is super interesting! 
+    # Cluster 1: Clearly high home ownership, likely the wealthiest cluster.
+    # Cluster 2: High rentership, low vacancy, feels like working-class neighborhoods.
+    # Clusters 3 and 4: Not easily distinguishable. Seems like the lower-class -- high vacancy.
