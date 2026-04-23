@@ -223,3 +223,93 @@ ggsave(here("output/maps/vacancy_map.png"), width = 8, height = 6)
 # Whoa. I knew there was a lot of missing data, but seeing this map shows me just how few tracts actually
 # have vacancy data. This makes me less excited about the graph I made above. For my own project, then, I think 
 # I'll pivot to a different demographic variable.
+
+# ------------------------------------------------------------------------------------#
+# 3.4 Face validity
+# Required validation exercises
+# ------------------------------------------------------------------------------------#
+
+# Note: For "displaying" these, I just opened them on my computer and looked. Wasn't sure if that was supposed 
+# to be part of the code, but it ended up being a lot of images so I decided just to browse manually
+
+# 1. Most similar pairs: Find the 5 pairs of tracts with the highest cosine similarity. 
+similarity_matrix[lower.tri(similarity_matrix, diag = TRUE)] <- NA # Avoid duplicates
+similarity_df <- as.data.frame(as.table(similarity_matrix)) %>%
+  filter(!is.na(Freq)) %>% # get rid of duplicates (since comparing all to all)
+  arrange(desc(Freq)) %>%
+  slice(1:5) %>% # take just the top five
+  rename(tract1 = Var1, tract2 = Var2, similarity = Freq)
+print("Top 5 most similar tract pairs:")
+print(similarity_df)
+# Notes on each of the tract's images:
+    # Pair 1:
+      # 36005008400: Brown, square brick 2-story apt buildings with gated yard/driveway in front. Lots of cars.
+      # 36005038800: Same architecture with gated driveway in front of short brown brick homes!! Strkingly similar!!
+    # Pair 2:
+      # 36005031400: Cute little single-family homes, often with stone detailing amongst brick, long driveway to street
+      # 36005031600: Many homes have same triangular roof above entryway, but not as similar as Pair 1.
+    # Pair 3:
+      # 36005038800: Same from Pair 1
+      # 36005039800: Honestly looks like a mix between Pair 1 and Pair 2. 
+        # I wonder if these three would all have been pretty similar if I could do a matrix comparing 3 ways.
+# OK, this is hurting my eyes a bit to look through all these, so I'll skip the last two pairs because I feel 
+# confident that there's face validity here. I am shocked how similar the images look, especially in Pair 1.
+
+# 2. Most dissimilar pairs: Find the 5 pairs with the lowest similarity. Display and describe.
+dissimilarity_df <- as.data.frame(as.table(similarity_matrix)) %>%
+  filter(!is.na(Freq)) %>% # get rid of duplicates (since comparing all to all)
+  arrange(Freq) %>%
+  slice(1:5) %>% # take just the top five worst
+  rename(tract1 = Var1, tract2 = Var2, similarity = Freq)
+print("Top 5 most dissimilar tract pairs:")
+print(dissimilarity_df)
+# Notes on each of the tract's images:
+    # Pair 1:
+      # 36005016300: Grassy green parks with a sidewalk in front! All so similar here
+      # 36061010900: Storefronts or inside stores! Colorful restaurants, boutiques, etc. So different from green grass
+    # Pair 2:
+      # 36005011000: All are a sidewalk/road, then a barrier (fence, median), then an open space (park, cemetery)
+      # 36061010900: Same from Pair 1. This shows up a couple times, and when I looked at these photos, they were
+      # also surprising to me! I should have done more validation because these are crazy photos that should not be
+      # on street view -- like one is literally a bowl of lollipops in what looks like a doctor's office...
+# The other top pairs all have 36061010900. I should have done this manual inspection earlier in the process and 
+# dropped this tract, because it seems like a clear outlier in terms of what's in the image... weird.
+
+# 3. Within-cluster examples: For 2-3 clusters, show representative images and describe the "character" of each
+# I will do this for clusters 1 and 2, which are the most distinct.
+# Print a list of 3 tracts for each cluster so I can look through:
+print("Cluster 1 tracts:")
+print(pca_graph %>% filter(cluster == 1) %>% slice(1:3) %>% select(tract_id))
+print("Cluster 2 tracts:")
+print(pca_graph %>% filter(cluster == 2) %>% slice(1:3) %>% select(tract_id))
+
+# Cluster 1 tract manually selected representative images: 36005000200_3, 36005000400_28, 36005002000_21
+    # Single fmaily homes or large apartment buildings with lots of trees, grass, open space
+    # Sociological description: Spacious suburbs
+# Cluster 2 tract manually selected representative images: 36061000700_17, 36061001300_21, 36061001402_3
+    # Dense, downtown, coastal, commercial areas
+    # Sociological description: Urban commercial districts
+# These really align with the cluster map I created above -- Manhattan versus out there in the boroughs
+
+# 4. Surprising results: Find at least one case where the embedding similarity is surprising
+# The most promising place to look for this might be towards the top of the similarity list but not quite at the top
+somewhat_similar_df <- as.data.frame(as.table(similarity_matrix)) %>%
+  filter(!is.na(Freq)) %>% # get rid of duplicates (since comparing all to all)
+  arrange(desc(Freq)) %>%
+  slice(10:15) %>% # take some that are near the top buttttt not quite at the top
+  rename(tract1 = Var1, tract2 = Var2, similarity = Freq)
+print(somewhat_similar_df) # This similarity is still pretty high (similar to top 5) but let's inspect manually
+
+# Manual inspection: 36005008400 vs 36005031400 (similarity = 0.669)
+    # 36005008400: Even more of those homes that are offset from the street with a gated yard/driveway in front.
+    # 36005031400: More of the same. Not surprising.
+# Manual inspection of the least similar of this group: 36005037000 vs 36005038800 (similarity = 0.662)
+    # 36005037000: More of that same architecture, but with more storefronts mixed in
+    # 36005038800: OK, here's a difference! This is a much less commercial area than the one above. Where there
+    # are residences, they are that same style, but there is much less variability here.
+
+# What might explain this?? Perhaps this is a difference betweeen human perception and machine perception. To me, 
+# the storefronts in the first tract of this pair really stood out as surprising, since I was seeing so much 
+# homogeneity in the tract architecture. But maybe the model wouldn't be so thrown by these outliers/would get rid
+# of them when I average and normalize the embeddings across the tract.
+
