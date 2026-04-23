@@ -1,8 +1,10 @@
 library(here)
 library(tidyverse)
 library(uwot)
+library(sf)
 
 source(here("R/embeddings.R"))
+source(here("R/sampling.R"))
 
 # CREATE AGGREGATE EMBEDDINGS
 
@@ -174,3 +176,50 @@ ggsave(here("output/figures/cluster_housing_rates.png"), width = 8, height = 6)
     # Cluster 1: Clearly high home ownership, likely the wealthiest cluster.
     # Cluster 2: High rentership, low vacancy, feels like working-class neighborhoods.
     # Clusters 3 and 4: Not easily distinguishable. Seems like the lower-class -- high vacancy.
+
+# ------------------------------------------------------------------------------------#
+# 3.3 Maps
+# Join your analysis results back to tract geometries and create maps
+# ------------------------------------------------------------------------------------#
+
+# Create crosswalk that links tract ID, PC1, PC2, and cluster to geometry
+# Uses functions defined for sampling.R
+all_tracts <- get_nyc_tracts()
+tract_crosswalk <- all_tracts %>%
+  select(tract_id = ct_code, geometry) %>%
+  right_join(pca_graph %>% select(tract_id, cluster, PC1, PC2), by = "tract_id") # Join cluster info to crosswalk
+
+# Create required maps
+# 1. Cluster map: color each Census tract by its visual similarity cluster
+ggplot(tract_crosswalk, aes(fill = factor(cluster))) +
+  geom_sf(color = "white", size = 0.1) +
+  labs(title = "Map of Census Tracts Colored by Cluster", fill = "Cluster") +
+  theme_void() +
+  scale_fill_manual(values = c("steelblue", "salmon", "lightgreen", "goldenrod"))
+ggsave(here("output/maps/cluster_map.png"), width = 8, height = 6)
+# Whoa! The clusters are pretty spatially coherent. It strikes me that group 1, which I thought based on 
+# housing composition would be the wealthiest, is clustered way out of the city.
+
+# 2. PCA map: color tracts by their score on the first principal component
+ggplot(tract_crosswalk, aes(fill = PC1)) +
+  geom_sf(color = "white", size = 0.1) +
+  labs(title = "Map of Census Tracts Colored by PC1 Score", fill = "PC1 Score") +
+  theme_void() +
+  scale_fill_viridis_c()
+ggsave(here("output/maps/pca_map.png"), width = 8, height = 6)
+# This strikes me as pretty similar to the cluster map, especially the high contrast between the 
+# cluster 1 area and the cluster 2 area versus the relatively low contrast/not many observable patterns
+# between the others. It's cool that this is so consistent.
+
+# 3. My choice: Map of tracts colored by vacancy rate (from the census data)
+vacancy_map_data <- tract_crosswalk %>%
+  left_join(housing_comp %>% select(tract_id, vacancy_rate), by = "tract_id")
+ggplot(vacancy_map_data, aes(fill = vacancy_rate)) +
+  geom_sf(color = "white", size = 0.1) +
+  labs(title = "Map of Census Tracts Colored by Vacancy Rate", fill = "Vacancy Rate") +
+  theme_void() +
+  scale_fill_viridis_c()
+ggsave(here("output/maps/vacancy_map.png"), width = 8, height = 6)
+# Whoa. I knew there was a lot of missing data, but seeing this map shows me just how few tracts actually
+# have vacancy data. This makes me less excited about the graph I made above. For my own project, then, I think 
+# I'll pivot to a different demographic variable.
