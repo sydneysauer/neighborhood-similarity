@@ -1,6 +1,10 @@
-# Neighborhood Similarity Project
+# Neighborhood Similarity
+
+### Computational Sociology Course Final Project 
 
 ### Sydney Sauer
+
+------------------------------------------------------------------------
 
 ## Project Overview
 
@@ -29,6 +33,7 @@ Note that all file paths in the code are relative to the root directory (using t
 1.  `embeddings.R`: Contains functions for processing and manipulating embeddings
 2.  `sampling.R`: Contains functions for downloading NYC tracts and sampling coordinates
 3.  `streetview.R`: Contains functions for processing Google Street View API calls
+4.  `analysis.R`: Contains functions for repeated analysis steps in pipeline
 
 ## Reproducing the Pipeline
 
