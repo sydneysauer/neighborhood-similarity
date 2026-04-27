@@ -5,6 +5,7 @@ library(sf)
 
 source(here("R/embeddings.R"))
 source(here("R/sampling.R"))
+source(here("R/analysis.R"))
 
 # CREATE AGGREGATE EMBEDDINGS
 
@@ -36,6 +37,7 @@ print(paste("Number of tracts:", nrow(tract_embeddings)))
 
 # Compute cosine similarity matrix between tract embeddings
 similarity_matrix <- tract_similarity(tract_embeddings)
+similarity_matrix[lower.tri(similarity_matrix, diag = TRUE)] <- NA # Avoid duplicates
 
 # ------------------------------------------------------------------------------------#
 # 3.1 Dimensionality reduction 
@@ -233,12 +235,7 @@ ggsave(here("output/maps/vacancy_map.png"), width = 8, height = 6)
 # to be part of the code, but it ended up being a lot of images so I decided just to browse manually
 
 # 1. Most similar pairs: Find the 5 pairs of tracts with the highest cosine similarity. 
-similarity_matrix[lower.tri(similarity_matrix, diag = TRUE)] <- NA # Avoid duplicates
-similarity_df <- as.data.frame(as.table(similarity_matrix)) %>%
-  filter(!is.na(Freq)) %>% # get rid of duplicates (since comparing all to all)
-  arrange(desc(Freq)) %>%
-  slice(1:5) %>% # take just the top five
-  rename(tract1 = Var1, tract2 = Var2, similarity = Freq)
+similarity_df <- slice_similarity(similarity_matrix, n=5, similar = TRUE)
 print("Top 5 most similar tract pairs:")
 print(similarity_df)
 # Notes on each of the tract's images:
@@ -256,11 +253,7 @@ print(similarity_df)
 # confident that there's face validity here. I am shocked how similar the images look, especially in Pair 1.
 
 # 2. Most dissimilar pairs: Find the 5 pairs with the lowest similarity. Display and describe.
-dissimilarity_df <- as.data.frame(as.table(similarity_matrix)) %>%
-  filter(!is.na(Freq)) %>% # get rid of duplicates (since comparing all to all)
-  arrange(Freq) %>%
-  slice(1:5) %>% # take just the top five worst
-  rename(tract1 = Var1, tract2 = Var2, similarity = Freq)
+dissimilarity_df <- slice_similarity(similarity_matrix, n = 5, similar = FALSE)
 print("Top 5 most dissimilar tract pairs:")
 print(dissimilarity_df)
 # Notes on each of the tract's images:
@@ -293,12 +286,9 @@ print(pca_graph %>% filter(cluster == 2) %>% slice(1:3) %>% select(tract_id))
 
 # 4. Surprising results: Find at least one case where the embedding similarity is surprising
 # The most promising place to look for this might be towards the top of the similarity list but not quite at the top
-somewhat_similar_df <- as.data.frame(as.table(similarity_matrix)) %>%
-  filter(!is.na(Freq)) %>% # get rid of duplicates (since comparing all to all)
-  arrange(desc(Freq)) %>%
-  slice(10:15) %>% # take some that are near the top buttttt not quite at the top
-  rename(tract1 = Var1, tract2 = Var2, similarity = Freq)
-print(somewhat_similar_df) # This similarity is still pretty high (similar to top 5) but let's inspect manually
+somewhat_similar_df <- slice_similarity(similarity_matrix, n = 15, similar = TRUE)
+print(somewhat_similar_df %>% slice(10:15)) 
+# This similarity is still pretty high (similar to top 5) but let's inspect manually
 
 # Manual inspection: 36005008400 vs 36005031400 (similarity = 0.669)
     # 36005008400: Even more of those homes that are offset from the street with a gated yard/driveway in front.
