@@ -171,33 +171,3 @@ tract_similarity <- function(embeddings) {
   similarity_matrix <- embeddings %*% t(embeddings) # Compare each tract embedding to every other tract embedding
   return(similarity_matrix)
 }
-
-# Deprecated version of aggregate_tract_embeddings that did not work. Keeping in case I can fix this approach.
-# DEP_aggregate_tract_embeddings <- function(embeddings, manifest) {
-#   # Validation 
-#   if (nrow(embeddings) != nrow(manifest)) {
-#     stop("Number of rows in embeddings must match number of rows in manifest.")
-#   }
-#   if (!is.matrix(embeddings)) {
-#     stop("Embeddings must be a matrix.")
-#   }
-
-#   # Group rows in embedding using tract_id from manifest, then compute column-wise mean for each group
-#   tract_embeddings <- manifest %>%
-#     bind_cols(tibble(embedding = list(embeddings))) %>%
-#     group_by(tract_id) %>%
-#     # Filter out tracts with less than 5 images (SEE NOTE AT END OF FUNCTION)
-#     filter(n() >= 5) %>%
-#     # Compute column-wise mean of the embedding vectors for each tract
-#     summarise(embedding = list(colMeans(do.call(rbind, embedding))), .groups = "drop")
-
-#   #   # Unnest list column embedding into columns named embedding_1, embedding_2, ..., embedding_1024
-#   #   unnest_wider(embedding, names_sep = "_")
-#   # # %>%
-#   # #   summarise(across(starts_with("embedding_"), mean, na.rm = TRUE), .groups = "drop")
-
-#   # for debugging: print the head
-#   print(head(tract_embeddings))
-
-#   #return(list(as.matrix(tract_embeddings %>% select(-tract_id)), tract_embeddings$tract_id))
-# }

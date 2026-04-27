@@ -312,4 +312,3 @@ print(somewhat_similar_df) # This similarity is still pretty high (similar to to
 # the storefronts in the first tract of this pair really stood out as surprising, since I was seeing so much 
 # homogeneity in the tract architecture. But maybe the model wouldn't be so thrown by these outliers/would get rid
 # of them when I average and normalize the embeddings across the tract.
-
