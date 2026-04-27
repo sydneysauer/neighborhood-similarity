@@ -81,6 +81,8 @@ ggplot(similarity_df, aes(x = similarity, y = pct_same_sex)) +
   labs(title = "Similarity to Greenwich Village and LGBTQ+ Population",
        x = "Similarity to Greenwich Village",
        y = "Percentage of Same-Sex Couples") + 
+# Bound the x-axis from 0.5 to 0.9 for legibility 
+  xlim(0.5, 0.9) +
   theme_minimal()
 ggsave(here("output/figures/similarity_vs_lgbtq_population.png"), width = 8, height = 6)
 # Conclusion: A slight positive relationship between this visual "feel" and queer population.
